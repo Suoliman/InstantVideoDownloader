@@ -24,6 +24,8 @@ function displayBytes(bytes) {
 function render(next) {
   state = next;
   const working = ['inspecting', 'downloading'].includes(state.status);
+  if (working) $('playback').value = state.outputMode || 'original';
+  $('playback').disabled = working;
   document.body.classList.toggle('has-video', !!state.metadata && !dirty);
   if (!dirty && state.url) $('video-url').value = state.url;
   $('use-login').checked = state.useLogin;
@@ -39,23 +41,31 @@ function render(next) {
     $('video-platform').textContent = PLATFORMS[metadata.platform]?.label || metadata.platform;
     const duration = Number.isFinite(metadata.duration) ? ` · ${Math.floor(metadata.duration / 60)}:${String(Math.floor(metadata.duration % 60)).padStart(2, '0')}` : '';
     $('video-creator').textContent = metadata.creator + duration;
-    $('max-quality').textContent = metadata.qualities?.length ? metadata.qualities[0].label : 'SOURCE QUALITY';
-    const key = `${state.url}|${metadata.heights.join(',')}`;
+    const quicktime = $('playback').value === 'quicktime';
+    const choices = quicktime ? metadata.quicktime?.qualities || [] : metadata.qualities || [];
+    const unavailable = quicktime && !metadata.quicktime?.available;
+    $('max-quality').textContent = choices.length ? choices[0].label : 'SOURCE QUALITY';
+    $('playback-note').textContent = !quicktime
+      ? 'Original codecs preserved. Use VLC if QuickTime plays only audio.'
+      : !metadata.quicktime ? 'Update the companion files, reload Instant, and inspect again to see QuickTime sources.'
+        : unavailable ? 'No H.264/AAC source is offered. Use Original quality with VLC or IINA.'
+        : 'Best H.264/AAC source. Resolution may be lower than Original quality. No re-encoding.';
+    const key = `${state.url}|${quicktime}|${JSON.stringify(choices)}`;
     if (key !== metadataKey) {
       metadataKey = key;
-      $('quality').replaceChildren(new Option('Highest available · recommended', 'best'));
-      for (const quality of metadata.qualities || []) $('quality').add(new Option(`Up to ${quality.label}`, quality.value));
+      $('quality').replaceChildren(new Option(quicktime ? 'Best available for QuickTime' : 'Highest available · recommended', 'best'));
+      for (const quality of choices) $('quality').add(new Option(`Up to ${quality.label}`, quality.value));
       $('thumbnail-wrap').classList.remove('has-image');
       $('thumbnail').removeAttribute('src');
       if (metadata.thumbnail) $('thumbnail').src = metadata.thumbnail;
     }
-    $('quality').disabled = working;
-    $('download').disabled = working || dirty;
+    $('quality').disabled = working || unavailable;
+    $('download').disabled = working || dirty || unavailable;
   }
   $('activity').hidden = !working;
   if (working) {
     const progress = state.progress || {};
-    $('activity-text').textContent = progress.stage === 'processing' ? 'Finishing original streams…' : progress.stage === 'downloading' ? 'Downloading original media…' : 'Finding available streams…';
+    $('activity-text').textContent = progress.stage === 'verifying' ? 'Verifying video and audio tracks…' : progress.stage === 'processing' ? 'Finishing original streams…' : progress.stage === 'downloading' ? 'Downloading original media…' : 'Finding available streams…';
     if (Number.isFinite(progress.percent)) $('progress').value = progress.percent;
     else $('progress').removeAttribute('value');
     const details = [];
@@ -65,12 +75,18 @@ function render(next) {
     $('progress-detail').textContent = details.join(' · ') || 'Processing locally on your machine';
   }
   $('success').hidden = state.status !== 'complete' || dirty;
-  if (state.result) $('filename').textContent = state.result.filename;
+  if (state.result) {
+    $('filename').textContent = state.result.filename;
+    const media = state.result.media;
+    $('media-details').textContent = media ? `${media.width} × ${media.height} · ${media.videoCodec?.toUpperCase()}${media.audioCodec ? ` + ${media.audioCodec.toUpperCase()}` : ' · no audio track'}` : '';
+    $('compatibility-warning').hidden = !media || media.quicktimeCompatible;
+    $('compatibility-warning').textContent = media && !media.quicktimeCompatible ? 'QuickTime may play only audio with these source codecs. Open in VLC/IINA or select QuickTime playback above.' : '';
+  }
   $('error').hidden = !state.error;
   $('error').textContent = state.error || '';
   $('companion').classList.toggle('connected', !!state.helper);
   $('companion-title').textContent = state.helper ? 'Local companion connected' : 'Local companion needed';
-  $('companion-detail').textContent = state.helper ? `FFmpeg ready · extractor ${state.helper.extractorVersion}` : 'One quick setup. Everything stays on your Mac.';
+  $('companion-detail').textContent = state.helper ? `FFmpeg ready · companion ${state.helper.version || 'older version'}` : 'One quick setup. Everything stays on your Mac.';
   highlightPlatform();
 }
 
@@ -123,9 +139,10 @@ $('source-form').addEventListener('submit', async (event) => {
   } catch (error) { showError(error); }
 });
 $('download').addEventListener('click', async () => {
-  try { await send('download', { url: $('video-url').value, quality: $('quality').value, useLogin: $('use-login').checked }); }
+  try { await send('download', { url: $('video-url').value, quality: $('quality').value, useLogin: $('use-login').checked, outputMode: $('playback').value }); }
   catch (error) { showError(error); }
 });
+$('playback').addEventListener('change', () => { if (state) render(state); });
 $('current-tab').addEventListener('click', () => currentTab().catch(showError));
 $('reconnect').addEventListener('click', reconnect);
 $('cancel').addEventListener('click', async () => {
@@ -145,6 +162,7 @@ chrome.runtime.onMessage.addListener((message) => { if (message.type === 'state'
 
 try {
   const initial = await send('getState');
+  $('playback').value = initial.state.outputMode || 'original';
   $('install-command').textContent = `python3 scripts/install_companion.py --extension-id ${initial.extensionId}`;
   render(initial.state);
   if (!initial.state.url) await currentTab().catch(() => {});

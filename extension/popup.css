@@ -65,6 +65,8 @@ input::placeholder { color: #6d8074; }
 h3 { font-size: 12px; line-height: 1.45; font-weight: 550; margin: 4px 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .video-text p { color: var(--muted); font-size: 10px; margin: 0; }
 .quality-heading { display: flex; align-items: center; justify-content: space-between; }
+.playback-note { color: var(--muted); font-size: 10px; line-height: 1.55; margin: 7px 0 14px; }
+#compatibility-warning { color: #f0b99c; }
 .quality-badge { color: var(--mint); font: 8px ui-monospace, monospace; }
 select { margin-top: 7px; width: 100%; border: 1px solid #34463c; border-radius: 6px; background: #111b16; color: var(--text); padding: 10px; font-size: 11px; color-scheme: dark; }
 .lossless-note { display: flex; gap: 6px; align-items: center; font-size: 9px; color: #a0b4a6; margin: 8px 0 13px; }

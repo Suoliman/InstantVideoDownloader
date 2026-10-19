@@ -3,18 +3,24 @@
 from __future__ import annotations
 
 import http.cookiejar
+import json
 import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import threading
 import time
 from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 
 from yt_dlp import YoutubeDL
+from yt_dlp.utils import DownloadError, ExtractorError
 
 PLATFORMS = {"facebook": "facebook.com", "instagram": "instagram.com", "tiktok": "tiktok.com"}
 FORMAT = "bestvideo*+bestaudio/best"
+H264 = r"(?i)^(avc1|h264)"
+AAC = r"(?i)^(mp4a|aac)"
+NO_QUICKTIME_SOURCE = "The platform does not offer an H.264/AAC source at this quality. Choose another quality, or use Original quality with VLC or IINA. No video was re-encoded."
 
 
 class RequestError(ValueError):
@@ -67,6 +73,50 @@ def ffmpeg_location():
     return executable
 
 
+def ffprobe_location():
+    sibling = Path(ffmpeg_location()).with_name("ffprobe")
+    if sibling.is_file() and os.access(sibling, os.X_OK):
+        return str(sibling)
+    search = os.pathsep.join([os.environ.get("PATH", ""), "/opt/homebrew/bin", "/usr/local/bin"])
+    executable = shutil.which("ffprobe", path=search)
+    if not executable:
+        raise RequestError("FFprobe is missing. On macOS, run: brew reinstall ffmpeg")
+    return executable
+
+
+def verify_output(path, output_mode="original", require_audio=False):
+    try:
+        probe = subprocess.run([
+            ffprobe_location(), "-v", "error", "-show_entries",
+            "stream=codec_name,codec_type,codec_tag_string,pix_fmt,width,height:stream_disposition=attached_pic",
+            "-of", "json", str(path),
+        ], capture_output=True, timeout=30, check=True)
+        streams = json.loads(probe.stdout)["streams"]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        raise RequestError("The saved media could not be verified. The download has not been marked successful.") from None
+    videos = [s for s in streams if s.get("codec_type") == "video" and not s.get("disposition", {}).get("attached_pic") and s.get("width", 0) > 0 and s.get("height", 0) > 0]
+    audios = [s for s in streams if s.get("codec_type") == "audio"]
+    if not videos:
+        raise RequestError("The saved file contains no usable video track. It has not been marked successful. Inspect and download the video again.")
+    if require_audio and not audios:
+        raise RequestError("The saved file is missing its audio track. It has not been marked successful. Inspect and download the video again.")
+    video = videos[0]
+    audio = audios[0] if audios else None
+    compatible = (
+        video.get("codec_name") == "h264"
+        and video.get("codec_tag_string") == "avc1"
+        and video.get("pix_fmt") in ("yuv420p", "yuvj420p")
+        and (audio is None or audio.get("codec_name") == "aac")
+    )
+    if output_mode == "quicktime" and not compatible:
+        raise RequestError("This source is not a standard 8-bit H.264/AAC MP4 for QuickTime. Use Original quality with VLC or IINA; no re-encoding was performed.")
+    return {
+        "videoCodec": video.get("codec_name"), "audioCodec": audio.get("codec_name") if audio else None,
+        "width": video["width"], "height": video["height"],
+        "quicktimeCompatible": compatible,
+    }
+
+
 def output_directory():
     directory = Path.home() / "Downloads" / "Instant"
     directory.mkdir(parents=True, exist_ok=True)
@@ -88,10 +138,18 @@ class QuietLogger:
         pass
 
 
-def options(directory, quality="best"):
+def options(directory, quality="best", output_mode="original"):
+    if output_mode not in ("original", "quicktime"):
+        raise RequestError("Choose Original quality or QuickTime playback.")
     if quality != "best" and (not isinstance(quality, str) or not re.fullmatch(r"[1-9]\d{1,4}", quality)):
         raise RequestError("Choose an available video quality.")
     selector = FORMAT if quality == "best" else f"bestvideo*[height<={quality}]+bestaudio/best[height<={quality}]"
+    if output_mode == "quicktime":
+        ceiling = "" if quality == "best" else f"[height<={quality}]"
+        video = f"bestvideo*[vcodec~='{H264}'][acodec~='(?i)^(none|mp4a|aac)']{ceiling}"
+        audio = f"bestaudio[acodec~='{AAC}']"
+        combined = f"best[vcodec~='{H264}'][acodec~='{AAC}']{ceiling}"
+        selector = f"{video}+{audio}/{combined}"
     return {
         "format": selector,
         "format_sort": ["res", "fps", "br"],
@@ -99,7 +157,7 @@ def options(directory, quality="best"):
         # Merging covers separate tracks; remuxing also covers a single source
         # served as MOV, MKV, or WebM. This postprocessor always uses stream copy.
         "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
-        "outtmpl": str(Path(directory) / "%(title).140B [%(id)s].%(ext)s"),
+        "outtmpl": str(Path(directory) / ("%(title).140B [%(id)s]" + (" [QuickTime]" if output_mode == "quicktime" else "") + ".%(ext)s")),
         "windowsfilenames": True,
         "noplaylist": True,
         "overwrites": False,
@@ -153,11 +211,20 @@ def public_metadata(info, platform):
     if info.get("is_live") or info.get("live_status") == "is_live":
         raise RequestError("Live streams are not supported. Open a published Reel or video.")
     formats = [f for f in info.get("formats", []) if f.get("vcodec") != "none" and not f.get("has_drm")]
-    heights = sorted({int(f["height"]) for f in formats if f.get("height")}, reverse=True)
-    qualities = []
-    for height in heights:
-        width = max((int(f.get("width") or 0) for f in formats if f.get("height") == height), default=0)
-        qualities.append({"value": str(height), "label": f"{width} × {height}" if width else f"{height}px tall"})
+    def quality_choices(candidates):
+        heights = sorted({int(f["height"]) for f in candidates if f.get("height")}, reverse=True)
+        result = []
+        for height in heights:
+            width = max((int(f.get("width") or 0) for f in candidates if f.get("height") == height), default=0)
+            result.append({"value": str(height), "label": f"{width} × {height}" if width else f"{height}px tall"})
+        return result
+
+    qualities = quality_choices(formats)
+    heights = [int(q["value"]) for q in qualities]
+    has_aac_track = any(f.get("vcodec") == "none" and re.match(AAC, f.get("acodec") or "") for f in info.get("formats", []))
+    compatible = [f for f in formats if re.match(H264, f.get("vcodec") or "") and (
+        re.match(AAC, f.get("acodec") or "") or (f.get("acodec") == "none" and has_aac_track)
+    )]
     thumbnail = info.get("thumbnail")
     if not isinstance(thumbnail, str) or not thumbnail.startswith("https://"):
         thumbnail = None
@@ -171,6 +238,7 @@ def public_metadata(info, platform):
         "qualities": qualities,
         "maxHeight": heights[0] if heights else None,
         "formatCount": len(formats),
+        "quicktime": {"available": bool(compatible), "qualities": quality_choices(compatible)},
     }
 
 
@@ -206,7 +274,8 @@ def run_job(request, emit, cancelled: threading.Event, directory=None):
     if action not in ("inspect", "download"):
         raise RequestError("Unknown media action.")
     target = Path(directory) if directory else (output_directory() if action == "download" else Path.home() / "Downloads" / "Instant")
-    opts = options(target, request.get("quality", "best"))
+    output_mode = request.get("outputMode", "original")
+    opts = options(target, request.get("quality", "best"), output_mode if action == "download" else "original")
     user_agent = request.get("userAgent")
     if isinstance(user_agent, str) and 0 < len(user_agent) < 1024 and not re.search(r"[\r\n\x00]", user_agent):
         opts["http_headers"] = {"User-Agent": user_agent}
@@ -244,12 +313,19 @@ def run_job(request, emit, cancelled: threading.Event, directory=None):
         if cancelled.is_set():
             raise Cancelled()
         emit("progress", {"stage": "inspecting", "percent": None})
-        info = ydl.extract_info(url, download=False)
+        try:
+            info = ydl.extract_info(url, download=False)
+        except (DownloadError, ExtractorError) as error:
+            if output_mode == "quicktime" and "requested format" in str(error).lower():
+                raise RequestError(NO_QUICKTIME_SOURCE) from None
+            raise
         if cancelled.is_set():
             raise Cancelled()
         metadata = public_metadata(info, platform)
         if action == "inspect":
             return metadata
+        if output_mode == "quicktime" and not metadata["quicktime"]["available"]:
+            raise RequestError(NO_QUICKTIME_SOURCE)
         result = ydl.process_ie_result(info, download=True)
         if cancelled.is_set():
             raise Cancelled()
@@ -257,4 +333,8 @@ def run_job(request, emit, cancelled: threading.Event, directory=None):
         resolved = path.resolve()
         if not resolved.is_relative_to(target.resolve()) or not resolved.is_file():
             raise RequestError("The download finished without a usable output file. Inspect and try again.")
-        return {"filename": resolved.name, "path": str(resolved), "bytes": resolved.stat().st_size, "metadata": metadata}
+        selected = result.get("requested_formats") or [result]
+        require_audio = any(f.get("acodec") not in (None, "none") for f in selected)
+        emit("progress", {"stage": "verifying", "percent": None})
+        media = verify_output(resolved, output_mode, require_audio=require_audio)
+        return {"filename": resolved.name, "path": str(resolved), "bytes": resolved.stat().st_size, "metadata": metadata, "media": media, "outputMode": output_mode}

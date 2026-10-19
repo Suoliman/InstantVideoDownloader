@@ -14,7 +14,7 @@ import threading
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from companion.core import Cancelled, RequestError, ffmpeg_location, friendly_error, run_job
+from companion.core import Cancelled, RequestError, ffmpeg_location, ffprobe_location, friendly_error, run_job
 
 HOST_NAME = "com.instantvideodownloader.companion"
 MAX_MESSAGE = 1024 * 1024
@@ -84,7 +84,8 @@ def main():
                 import yt_dlp.version
                 try:
                     ffmpeg_location()
-                    send(request_id, "result", {"version": "0.1.1", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True})
+                    ffprobe_location()
+                    send(request_id, "result", {"version": "0.1.2", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True, "capabilities": ["quicktime-source", "verify-media"]})
                 except RequestError as error:
                     send(request_id, "error", {"message": str(error)})
             elif action == "cancel":

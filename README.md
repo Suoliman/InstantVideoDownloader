@@ -30,7 +30,7 @@ The installer also supports Linux (`--browser chromium` for Chromium). Windows i
 1. Open the individual video in Chrome. Sign in normally if it requires your account.
 2. Open Instant. It fills in the current tab's supported video URL; you can paste another link instead.
 3. Leave **Use Chrome login** enabled to use that platform's cookies from the current Chrome profile. Turn it off for anonymous extraction.
-4. Select **Find video**, choose **Highest available** or a resolution limit, then **Download original**.
+4. Select **Find video**, choose a **Playback** mode and quality, then **Download original**. For QuickTime or Finder preview, select **QuickTime / Finder · H.264 + AAC**. **Original quality** keeps the platform's highest source codecs and may require VLC or IINA.
 5. Files appear in `~/Downloads/Instant`. **Show in Finder** reveals a completed download.
 
 Downloads continue when you close the popup. Reopen it to check progress or cancel. Cancellation waits for the current network request or merge operation to return. Partial downloads can be resumed by downloading the same video again. Process state does not survive a Chrome restart.
@@ -53,6 +53,10 @@ The companion uses **yt-dlp** to extract the versions a platform exposes to your
 
 Downloads are saved as **MP4**. Separate tracks are merged directly into MP4; a combined source in another container is repackaged into MP4 using stream copy. This changes the container without re-encoding or reducing resolution, frame rate, or bitrate. An existing MP4 source is kept intact. If a source codec cannot be stored in MP4, the operation reports an error rather than re-encoding or selecting a lower-quality source. Playback support still depends on the source codecs and your macOS version. The highest source can contain a platform watermark; this app does not promise watermark removal.
 
+**Original quality** remains the default. **QuickTime / Finder** explicitly selects the best source offered as H.264 video with AAC audio. A compatible source may have a lower resolution than the highest original source; the quality menu shows only the resolutions offered for the selected playback mode. There is no codec conversion or hidden fallback. If no compatible source is offered, QuickTime download is unavailable. QuickTime files use a separate `[QuickTime].mp4` filename so an older incompatible MP4 is not reused.
+
+Before reporting success, FFprobe checks the saved file for a real video track and any expected audio track. QuickTime mode also checks for standard 8-bit, 4:2:0 H.264 with the `avc1` tag and AAC audio. The result displays actual codecs and warns if the original uses codecs outside this preset. These checks do not replace playback testing in QuickTime on a physical Mac.
+
 **The platform may not expose the creator's original upload.** Your Chrome session establishes account access; it does not guarantee that a platform will accept a request from a separate downloader. Platforms can apply challenges, rate limits, regional restrictions, or change their extraction behavior. The extension reports failures instead of silently producing lower-quality recordings. Browser fingerprinting or device-bound access can still prevent a download. Protected/DRM content is not supported.
 
 ## How your login is used
@@ -74,6 +78,23 @@ Permissions:
 The native host is registered for your specific extension ID. No content script is injected into your pages. Session access can be disabled per request with **Use Chrome login**.
 
 ## Update and troubleshoot
+
+### Audio-only playback in QuickTime (v0.1.2)
+
+Finder's **MPEG-4 movie** label is normal for an MP4. The container can hold video codecs that QuickTime cannot decode on your Mac; changing MKV to MP4 does not change those codecs. Without probing the affected file, audio-only playback alone does not establish whether its video track is unsupported, missing, or damaged.
+
+1. Update **both `extension/` and `companion/`** in the existing project folder. If you cloned it, run `git pull origin main`. If you downloaded a ZIP, copy the latest source files into the existing installed folder without removing `.venv`.
+2. Open `chrome://extensions` and click **Reload** on Instant. In the popup, confirm **companion 0.1.2** appears. If the version is still older, the registered companion points to a different folder: rerun `python3 scripts/install_companion.py --extension-id YOUR_EXTENSION_ID` from the updated project, using the ID Chrome currently shows, then reload again.
+3. Inspect the video and select **QuickTime / Finder · H.264 + AAC** in **Playback**.
+4. Download again. The new filename includes `[QuickTime]`; the existing original file is preserved.
+
+To watch the existing original immediately, try VLC or IINA. To diagnose its tracks without exposing links or session data, substitute the actual local filename in:
+
+```sh
+ffprobe -v error -show_entries stream=codec_type,codec_name,codec_tag_string,pix_fmt,width,height -of default=noprint_wrappers=1 "video.mp4"
+```
+
+If the platform offers no H.264/AAC version, this app keeps the original stream option rather than re-encoding it. A new encoding would require a separate, explicit quality tradeoff.
 
 ### Update to MP4 output (v0.1.1)
 
@@ -124,7 +145,7 @@ npm run test:browser
 
 The browser UI suite uses a simulated Chrome API and the actual popup code; it checks inspection/download wiring, quality selection, progress, cancellation, title escaping, and layout. Background tests exercise the actual service worker code with mocked Chrome transport to verify cookie scoping, anonymous operation, state persistence, and disconnect handling.
 
-The Python integration tests generate two real video qualities plus an audio track, serve them locally, and download/merge them with the production companion. Only social-site extraction is substituted with fixture metadata. Tests compare encoded video packet hashes to prove that merging has not re-encoded the video. Other tests cover URL boundaries, platform cookie isolation, error redaction, native framing, and installation.
+The Python integration tests generate real H.264, AV1, and AAC sources, serve them locally, and download/merge them with the production companion. Only social-site extraction is substituted with fixture metadata. Tests compare encoded packet hashes and decode a video frame to verify the outputs. They check that Original quality retains the higher-resolution AV1 source while QuickTime explicitly selects the available H.264/AAC alternative, without re-encoding either source. Tests also reject audio-only files and missing expected audio. Other tests cover URL boundaries, platform cookie isolation, error redaction, native framing, and installation.
 
 `npm run test:extension` is an additional real extension/native-host browser check for a browser that permits unpacked extensions. It is blocked in the current cloud Chromium by administrator policy (`ExtensionInstallBlocklist: ["*"]`); the policy is left intact. The default browser UI checks do not install an extension or bypass that restriction.
 

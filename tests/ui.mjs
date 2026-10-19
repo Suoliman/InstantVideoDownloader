@@ -39,6 +39,7 @@ try {
       title: 'Small moments, big memories.', creator: '@personal.library', platform: 'instagram',
       duration: 25, thumbnail: null, heights: [1920, 1280], maxHeight: 1920,
       qualities: [{ value: '1920', label: '1080 × 1920' }, { value: '1280', label: '720 × 1280' }],
+      quicktime: { available: true, qualities: [{ value: '1280', label: '720 × 1280' }] },
     };
     globalThis.testHarness = { emit, requests, metadata };
     globalThis.chrome = {
@@ -54,7 +55,7 @@ try {
             setTimeout(() => emit({ status: 'ready', metadata }), 50);
           }
           if (message.type === 'download') {
-            emit({ status: 'downloading', progress: { stage: 'downloading', percent: 41, downloaded: 4e6, total: 10e6, speed: 2e6, eta: 3 } });
+            emit({ status: 'downloading', outputMode: message.outputMode, progress: { stage: 'downloading', percent: 41, downloaded: 4e6, total: 10e6, speed: 2e6, eta: 3 } });
           }
           if (message.type === 'cancel') emit({ status: 'error', progress: null, error: 'Cancelled. Partial media files can be resumed by downloading again.' });
           return { ok: true };
@@ -99,6 +100,17 @@ try {
   assert.equal(overflow, false);
   console.log('PASS: Title escaping and popup layout without horizontal overflow.');
 
+  await page.locator('#playback').selectOption('quicktime');
+  assert.equal(await page.locator('#quality option').count(), 2);
+  assert.equal(await page.locator('#max-quality').innerText(), '720 × 1280');
+  assert.match(await page.locator('#playback-note').innerText(), /Resolution may be lower/);
+  await page.evaluate(() => testHarness.emit({ metadata: { ...testHarness.metadata, quicktime: { available: false, qualities: [] } } }));
+  assert.equal(await page.locator('#download').isDisabled(), true);
+  assert.match(await page.locator('#playback-note').innerText(), /No H.264\/AAC source/);
+  await page.evaluate(() => testHarness.emit({ metadata: testHarness.metadata }));
+  assert.equal(await page.locator('#download').isEnabled(), true);
+  console.log('PASS: QuickTime sources show their actual resolution and unavailable compatible sources cannot download.');
+
   await page.locator('#quality').selectOption('1280');
   await page.locator('#download').click();
   assert.equal(await page.locator('#video-url').isDisabled(), true);
@@ -106,13 +118,17 @@ try {
   assert.equal(await page.locator('#progress').getAttribute('value'), '41');
   const download = await page.evaluate(() => testHarness.requests.find((request) => request.type === 'download'));
   assert.equal(download.quality, '1280');
+  assert.equal(download.outputMode, 'quicktime');
   await page.locator('#cancel').click();
   assert.match(await page.locator('#error').innerText(), /Cancelled/);
   console.log('PASS: Selected quality, progress, busy controls, and cancellation wiring.');
 
-  await page.evaluate(() => testHarness.emit({ status: 'complete', error: null, result: { filename: 'A memory [123].mp4' } }));
+  await page.evaluate(() => testHarness.emit({ status: 'complete', error: null, result: { filename: 'A memory [123].mp4', media: { videoCodec: 'av1', audioCodec: 'aac', width: 1080, height: 1920, quicktimeCompatible: false } } }));
   assert.equal(await page.locator('#success').isVisible(), true);
   assert.equal(await page.locator('#filename').innerText(), 'A memory [123].mp4');
+  assert.match(await page.locator('#media-details').innerText(), /AV1/);
+  assert.equal(await page.locator('#compatibility-warning').isVisible(), true);
+  assert.match(await page.locator('#compatibility-warning').innerText(), /QuickTime may play only audio/);
   await page.locator('#open-folder').click();
   assert.equal(await page.evaluate(() => testHarness.requests.some((r) => r.type === 'openFolder')), true);
   await page.locator('#video-url').fill('https://www.tiktok.com/@creator/video/123');

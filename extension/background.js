@@ -3,7 +3,7 @@ import { parseVideoUrl, PLATFORMS } from './platforms.js';
 const HOST = 'com.instantvideodownloader.companion';
 let port;
 const pending = new Map();
-let state = { status: 'idle', url: '', useLogin: true, helper: null, metadata: null, progress: null, result: null, error: null };
+let state = { status: 'idle', url: '', useLogin: true, outputMode: 'original', helper: null, metadata: null, progress: null, result: null, error: null };
 const loaded = chrome.storage.session.get('state').then((saved) => {
   if (saved.state) state = { ...state, ...saved.state, helper: null };
   if (['inspecting', 'downloading'].includes(state.status)) {
@@ -81,17 +81,29 @@ async function media(action, input) {
     throw new Error('Inspect this video before downloading it.');
   }
   const useLogin = input.useLogin !== false;
+  const outputMode = input.outputMode || 'original';
+  if (!['original', 'quicktime'].includes(outputMode)) throw new Error('Choose Original quality or QuickTime playback.');
   await update({
-    status: action === 'inspect' ? 'inspecting' : 'downloading', url: parsed.url, useLogin,
+    status: action === 'inspect' ? 'inspecting' : 'downloading', url: parsed.url, useLogin, outputMode,
     metadata: action === 'inspect' ? null : state.metadata,
     progress: { stage: 'inspecting', percent: null }, result: null, error: null,
   });
   // Run independently of popup lifetime; connectNative keeps the service worker alive.
   (async () => {
+    if (action === 'download' && outputMode === 'quicktime') {
+      const helper = await native('ping');
+      await update({ helper });
+      if (!helper.capabilities?.includes('quicktime-source')) {
+        throw new Error('The local companion needs updating for QuickTime playback. Update the companion files in the installed project folder, then reload Instant in chrome://extensions.');
+      }
+    }
     const cookies = await sessionCookies(parsed.platform, useLogin);
-    const result = await native(action, { url: parsed.url, cookies, userAgent: navigator.userAgent, quality: input.quality || 'best' }, (progress) => {
+    const result = await native(action, { url: parsed.url, cookies, userAgent: navigator.userAgent, quality: input.quality || 'best', outputMode }, (progress) => {
       update({ progress }).catch(() => {});
     });
+    if (action === 'download' && outputMode === 'quicktime' && !result.media?.quicktimeCompatible) {
+      throw new Error('The companion did not verify a QuickTime-compatible video track. Update both the extension and companion, then try again.');
+    }
     if (action === 'inspect') await update({ status: 'ready', metadata: result, progress: null });
     else await update({ status: 'complete', result, metadata: result.metadata, progress: null });
   })().catch((error) => update({ status: 'error', error: error.message, progress: null }));

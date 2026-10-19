@@ -37,6 +37,9 @@
 
       <section id="video-card" class="video-card" hidden aria-label="Video details">
         <div class="video-summary"><div class="thumbnail" id="thumbnail-wrap"><img id="thumbnail" alt="" referrerpolicy="no-referrer"><span class="thumbnail-fallback" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M17 6 6 17M6 7v10h10"/></svg></span></div><div class="video-text"><div id="video-platform" class="eyebrow"></div><h3 id="video-title"></h3><p id="video-creator"></p></div></div>
+        <label for="playback">PLAYBACK</label>
+        <select id="playback" aria-describedby="playback-note"><option value="original">Original quality · all source codecs</option><option value="quicktime">QuickTime / Finder · H.264 + AAC</option></select>
+        <p id="playback-note" class="playback-note">Original codecs preserved. Use VLC if QuickTime plays only audio.</p>
         <div class="quality-heading"><label for="quality">DOWNLOAD QUALITY</label><span id="max-quality" class="quality-badge"></span></div>
         <select id="quality"><option value="best">Highest available · recommended</option></select>
         <div class="lossless-note"><span aria-hidden="true">✧</span> MP4 · Original streams. No re-encoding.</div>
@@ -44,13 +47,13 @@
       </section>
 
       <section id="activity" class="activity" hidden aria-live="polite" aria-atomic="true"><div class="activity-line"><span id="activity-text"></span><button id="cancel" type="button">Cancel</button></div><progress id="progress" max="100" aria-label="Download progress"></progress><p id="progress-detail"></p></section>
-      <section id="success" class="success" hidden aria-live="polite"><span class="success-icon" aria-hidden="true">✓</span><div><strong>Saved. All yours.</strong><p id="filename"></p><button id="open-folder" type="button">Show in Finder ↗</button></div></section>
+      <section id="success" class="success" hidden aria-live="polite"><span class="success-icon" aria-hidden="true">✓</span><div><strong>Saved. All yours.</strong><p id="filename"></p><p id="media-details"></p><p id="compatibility-warning" hidden></p><button id="open-folder" type="button">Show in Finder ↗</button></div></section>
       <div id="error" class="error" role="alert" hidden></div>
     </section>
 
     <section id="companion" class="companion"><div class="companion-icon" aria-hidden="true">⌘</div><div class="companion-text"><strong id="companion-title">Checking local companion</strong><span id="companion-detail">Your Mac does the heavy lifting.</span></div><button id="reconnect" type="button">Reconnect</button></section>
     <details id="setup" class="setup"><summary>First time? Connect your Mac <span>+</span></summary><p>Install Python 3.11+ and FFmpeg, then load this folder with <b>Load unpacked</b> in <code>chrome://extensions</code>. In the project folder, run:</p><pre>brew install python ffmpeg</pre><pre id="install-command"></pre><button id="copy-command" type="button">Copy install command</button><p>The companion runs only on your Mac. Keep the project folder in place. See README.md for complete instructions.</p></details>
-    <footer><span><span class="privacy-dot"></span> Your session stays on your machine</span><span class="footer-version">v0.1.1</span></footer>
+    <footer><span><span class="privacy-dot"></span> Your session stays on your machine</span><span class="footer-version">v0.1.2</span></footer>
   </main>
   <script src="popup.js" type="module"></script>
 </body>

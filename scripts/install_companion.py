@@ -34,7 +34,7 @@ def main():
         subprocess.run([str(python), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")], check=True)
     if not python.is_file():
         parser.error("Create .venv and install requirements.txt first, or omit --skip-deps.")
-    subprocess.run([str(python), "-c", "from companion.core import ffmpeg_location; print('FFmpeg:', ffmpeg_location())"], cwd=ROOT, check=True)
+    subprocess.run([str(python), "-c", "from companion.core import ffmpeg_location, ffprobe_location; print('FFmpeg:', ffmpeg_location()); print('FFprobe:', ffprobe_location())"], cwd=ROOT, check=True)
     if args.manifest_dir:
         directory = args.manifest_dir.expanduser().resolve()
     elif sys.platform == "darwin":

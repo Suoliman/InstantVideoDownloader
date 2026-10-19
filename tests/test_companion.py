@@ -16,7 +16,7 @@ from yt_dlp import YoutubeDL
 
 from companion.core import (
     Cancelled, RequestError, add_cookies, friendly_error, options,
-    public_metadata, run_job, validate_url,
+    public_metadata, run_job, validate_url, verify_output,
 )
 from companion.host import read_message, write_message
 
@@ -96,6 +96,8 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reply["id"], "health")
         self.assertEqual(reply["type"], "result")
         self.assertTrue(reply["data"]["ffmpeg"])
+        self.assertEqual(reply["data"]["version"], "0.1.2")
+        self.assertIn("quicktime-source", reply["data"]["capabilities"])
         self.assertEqual(process.stderr, b"")
 
     def test_installer_registers_only_specified_extension(self):
@@ -139,6 +141,11 @@ class MediaIntegrationTests(unittest.TestCase):
                 "-i", str(cls.directory / "audio.m4a"), "-map", "0:v:0", "-map", "1:a:0",
                 "-c", "copy", str(cls.directory / f"combined.{extension}"),
             ], check=True)
+        subprocess.run([
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
+            "testsrc=size=128x96:rate=10:duration=0.8", "-an", "-c:v", "libaom-av1",
+            "-cpu-used", "8", "-threads", "1", "-pix_fmt", "yuv420p", str(cls.directory / "av1.mp4"),
+        ], check=True)
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), partial(SilentHandler, directory=str(cls.directory)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -160,7 +167,7 @@ class MediaIntegrationTests(unittest.TestCase):
         cls.thread.join()
         cls.temporary.cleanup()
 
-    def job(self, action, quality="best", emit=None, cancelled=None, info=None):
+    def job(self, action, quality="best", emit=None, cancelled=None, info=None, output_mode="original"):
         fixture = info if info is not None else self.info
         output = self.directory / f"out-{action}-{quality}-{fixture['id']}"
         output.mkdir(exist_ok=True)
@@ -171,7 +178,7 @@ class MediaIntegrationTests(unittest.TestCase):
 
         with patch.object(YoutubeDL, "extract_info", autospec=True, side_effect=extract_fixture):
             return run_job(
-                {"action": action, "url": "https://www.instagram.com/reel/Test/", "quality": quality},
+                {"action": action, "url": "https://www.instagram.com/reel/Test/", "quality": quality, "outputMode": output_mode},
                 emit or (lambda *_: None), cancelled or threading.Event(), directory=output,
             )
 
@@ -193,6 +200,9 @@ class MediaIntegrationTests(unittest.TestCase):
         self.assertEqual(next(s for s in streams if s["codec_type"] == "video")["height"], height)
         self.assertEqual(self.packet_hashes(path), self.packet_hashes(self.directory / source), "Video packets must be byte-identical: no re-encoding")
         self.assertEqual(self.packet_hashes(path, "a:0"), self.packet_hashes(self.directory / "audio.m4a", "a:0"), "Audio packets must be byte-identical: no re-encoding")
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v:0", "-frames:v", "1", "-f", "null", "-",
+        ], check=True, capture_output=True, timeout=15)
 
     def test_highest_quality_download_merges_audio_without_reencoding(self):
         events = []
@@ -203,6 +213,48 @@ class MediaIntegrationTests(unittest.TestCase):
 
     def test_quality_ceiling_downloads_requested_source(self):
         self.verify_media(self.job("download", quality="48"), "low.mp4", 48)
+
+    def mixed_codec_info(self):
+        info = copy.deepcopy(self.info)
+        info["id"] = "mixed-codecs"
+        info["formats"][1].update({
+            "format_id": "av1-high", "vcodec": "av01.0.04M.08",
+            "url": f"http://127.0.0.1:{self.server.server_port}/av1.mp4",
+        })
+        return info
+
+    def test_quicktime_selects_h264_aac_without_transcoding_and_original_keeps_av1(self):
+        info = self.mixed_codec_info()
+        original = self.job("download", info=info)
+        self.verify_media(original, "av1.mp4", 96)
+        self.assertFalse(original["media"]["quicktimeCompatible"])
+        compatible = self.job("download", info=info, output_mode="quicktime")
+        self.verify_media(compatible, "low.mp4", 48)
+        self.assertEqual(compatible["media"]["videoCodec"], "h264")
+        self.assertEqual(compatible["media"]["audioCodec"], "aac")
+        self.assertTrue(compatible["media"]["quicktimeCompatible"])
+        self.assertIn("[QuickTime]", compatible["filename"])
+        self.assertEqual(Path(original["path"]).parent, Path(compatible["path"]).parent)
+        self.assertNotEqual(original["path"], compatible["path"], "QuickTime must not reuse the incompatible original file")
+        self.assertEqual(compatible["metadata"]["quicktime"]["qualities"], [{"value": "48", "label": "64 × 48"}])
+
+    def test_quicktime_reports_when_no_compatible_source_is_offered(self):
+        info = self.mixed_codec_info()
+        info["formats"] = info["formats"][1:]
+        with self.assertRaisesRegex(RequestError, "does not offer an H.264/AAC source"):
+            self.job("download", info=info, output_mode="quicktime")
+
+    def test_audio_only_output_is_rejected(self):
+        with self.assertRaisesRegex(RequestError, "no usable video track"):
+            verify_output(self.directory / "audio.m4a")
+
+    def test_missing_expected_audio_is_rejected(self):
+        with self.assertRaisesRegex(RequestError, "missing its audio track"):
+            verify_output(self.directory / "high.mp4", require_audio=True)
+
+    def test_quicktime_rejects_an_incompatible_video_codec(self):
+        with self.assertRaisesRegex(RequestError, "not a standard 8-bit H.264/AAC"):
+            verify_output(self.directory / "av1.mp4", output_mode="quicktime")
 
     def single_source_info(self, extension):
         info = copy.deepcopy(self.info)

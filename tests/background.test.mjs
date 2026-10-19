@@ -8,6 +8,7 @@ const snapshots = [];
 let stored;
 let hold = false;
 let currentPort;
+let supportsQuicktime = true;
 const metadata = { title: 'Fixture', platform: 'instagram', creator: 'Fixture', heights: [1920], qualities: [{ value: '1920', label: '1080 × 1920' }] };
 const event = () => {
   const listeners = [];
@@ -44,7 +45,8 @@ globalThis.chrome = {
           if (hold && ['inspect', 'download'].includes(request.action)) return;
           queueMicrotask(() => this.onMessage.emit({
             id: request.id, type: 'result',
-            data: request.action === 'ping' ? { ffmpeg: true, extractorVersion: 'fixture' } : metadata,
+            data: request.action === 'ping' ? { ffmpeg: true, extractorVersion: 'fixture', version: '0.1.2', capabilities: supportsQuicktime ? ['quicktime-source'] : [] }
+              : request.action === 'download' ? { metadata, outputMode: request.outputMode, media: { quicktimeCompatible: true } } : metadata,
           }));
         },
       };
@@ -106,6 +108,28 @@ test('background keeps login data local to native messages and preserves job sta
     assert.deepEqual(nativeRequests.at(-1).cookies, []);
     assert.equal(nativeRequests.at(-1).url, 'https://instagram.com/reel/Test/');
     assert.equal(stored.useLogin, false);
+  });
+
+  await suite.test('QuickTime selection reaches the companion and requires a verified result', async () => {
+    await request({ type: 'download', url: 'https://instagram.com/reel/Test/', outputMode: 'quicktime', useLogin: false });
+    await waitFor(() => stored?.status === 'complete');
+    assert.equal(nativeRequests.at(-1).outputMode, 'quicktime');
+    assert.equal(stored.outputMode, 'quicktime');
+    assert.equal(stored.result.media.quicktimeCompatible, true);
+    await request({ type: 'inspect', url: 'https://instagram.com/reel/Test/', useLogin: false });
+    await waitFor(() => stored?.status === 'ready');
+  });
+
+  await suite.test('a stale companion cannot silently ignore QuickTime mode', async () => {
+    supportsQuicktime = false;
+    const downloadCount = nativeRequests.filter((r) => r.action === 'download').length;
+    await request({ type: 'download', url: 'https://instagram.com/reel/Test/', outputMode: 'quicktime', useLogin: false });
+    await waitFor(() => stored?.status === 'error');
+    assert.match(stored.error, /companion needs updating/);
+    assert.equal(nativeRequests.filter((r) => r.action === 'download').length, downloadCount);
+    supportsQuicktime = true;
+    await request({ type: 'inspect', url: 'https://instagram.com/reel/Test/', useLogin: false });
+    await waitFor(() => stored?.status === 'ready');
   });
 
   await suite.test('rejects stale downloads and overlapping operations', async () => {
