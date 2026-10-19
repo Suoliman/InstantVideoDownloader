@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Instant — Reels & TikTok Downloader",
+  "description": "Original media, highest available quality. A personal, local downloader for Facebook, Instagram and TikTok.",
+  "version": "0.1.0",
+  "minimum_chrome_version": "120",
+  "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
+  "permissions": ["activeTab", "cookies", "nativeMessaging", "storage", "contextMenus"],
+  "host_permissions": [
+    "https://*.facebook.com/*",
+    "https://*.instagram.com/*",
+    "https://*.tiktok.com/*"
+  ],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Save with Instant", "default_icon": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" } },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'; connect-src 'self'; img-src 'self' https: data:"
+  }
+}

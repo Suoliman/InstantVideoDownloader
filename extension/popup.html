@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Instant · Save the original</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M17 6 6 17M6 7v10h10"/></svg></span><span>instant<span class="brand-period">.</span></span></div>
+      <span class="personal-badge"><span></span> PERSONAL EDITION</span>
+    </header>
+
+    <section class="intro">
+      <div class="eyebrow"><span></span> KEEP THE GOOD STUFF</div>
+      <h1>Worth watching.<br><span>Worth keeping.</span></h1>
+      <p>Your favorite short videos. The best available quality.<br>Saved straight to your Mac.</p>
+    </section>
+
+    <div class="platforms" aria-label="Supported platforms">
+      <span data-platform="facebook"><b class="facebook" aria-hidden="true">f</b> Facebook</span>
+      <span data-platform="instagram"><svg class="instagram" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".7"/></svg> Instagram</span>
+      <span data-platform="tiktok"><b class="tiktok" aria-hidden="true">♪</b> TikTok</span>
+    </div>
+
+    <section class="download-card">
+      <div class="card-heading"><h2>Make it yours</h2><span>01 — SOURCE</span></div>
+      <form id="source-form">
+        <label for="video-url">VIDEO LINK</label>
+        <div class="input-wrap"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m10 13 4-4m-5 7-2 2a4 4 0 0 1-6-6l5-5a4 4 0 0 1 6 0m0 10a4 4 0 0 0 6 0l5-5a4 4 0 0 0-6-6l-2 2" transform="translate(1 0) scale(.9)"/></svg><input id="video-url" type="url" placeholder="Paste a Reel or TikTok link…" autocomplete="off" spellcheck="false" required maxlength="4096" aria-describedby="link-help"><button id="current-tab" type="button" title="Use the current tab" aria-label="Use the current tab"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 18 12-12M6 6h12v12"/></svg></button></div>
+        <div id="link-help" class="field-help">Open a video in Chrome, then use its link.</div>
+        <label class="login-row"><input id="use-login" type="checkbox" checked><span class="switch" aria-hidden="true"></span><span>Use Chrome login<span class="login-note">Access the videos you can already watch</span></span><span class="local-tag">LOCAL</span></label>
+        <button class="primary" id="inspect" type="submit"><span>Find video</span><span aria-hidden="true">→</span></button>
+      </form>
+
+      <section id="video-card" class="video-card" hidden aria-label="Video details">
+        <div class="video-summary"><div class="thumbnail" id="thumbnail-wrap"><img id="thumbnail" alt="" referrerpolicy="no-referrer"><span class="thumbnail-fallback" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M17 6 6 17M6 7v10h10"/></svg></span></div><div class="video-text"><div id="video-platform" class="eyebrow"></div><h3 id="video-title"></h3><p id="video-creator"></p></div></div>
+        <div class="quality-heading"><label for="quality">DOWNLOAD QUALITY</label><span id="max-quality" class="quality-badge"></span></div>
+        <select id="quality"><option value="best">Highest available · recommended</option></select>
+        <div class="lossless-note"><span aria-hidden="true">✧</span> Original streams. No re-encoding.</div>
+        <button class="primary" id="download" type="button"><span>Download original</span><span aria-hidden="true">↓</span></button>
+      </section>
+
+      <section id="activity" class="activity" hidden aria-live="polite" aria-atomic="true"><div class="activity-line"><span id="activity-text"></span><button id="cancel" type="button">Cancel</button></div><progress id="progress" max="100" aria-label="Download progress"></progress><p id="progress-detail"></p></section>
+      <section id="success" class="success" hidden aria-live="polite"><span class="success-icon" aria-hidden="true">✓</span><div><strong>Saved. All yours.</strong><p id="filename"></p><button id="open-folder" type="button">Show in Finder ↗</button></div></section>
+      <div id="error" class="error" role="alert" hidden></div>
+    </section>
+
+    <section id="companion" class="companion"><div class="companion-icon" aria-hidden="true">⌘</div><div class="companion-text"><strong id="companion-title">Checking local companion</strong><span id="companion-detail">Your Mac does the heavy lifting.</span></div><button id="reconnect" type="button">Reconnect</button></section>
+    <details id="setup" class="setup"><summary>First time? Connect your Mac <span>+</span></summary><p>Install Python 3.11+ and FFmpeg, then load this folder with <b>Load unpacked</b> in <code>chrome://extensions</code>. In the project folder, run:</p><pre>brew install python ffmpeg</pre><pre id="install-command"></pre><button id="copy-command" type="button">Copy install command</button><p>The companion runs only on your Mac. Keep the project folder in place. See README.md for complete instructions.</p></details>
+    <footer><span><span class="privacy-dot"></span> Your session stays on your machine</span><span class="footer-version">v0.1</span></footer>
+  </main>
+  <script src="popup.js" type="module"></script>
+</body>
+</html>

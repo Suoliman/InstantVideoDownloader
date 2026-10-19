@@ -1,0 +1,14 @@
+{
+  "name": "instant-video-downloader",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check extension/background.js && node --check extension/popup.js && node --check extension/platforms.js",
+    "test:browser": "node tests/ui.mjs",
+    "test:extension": "node tests/browser.mjs",
+    "test:background": "node --test tests/background.test.mjs",
+    "package": "python3 scripts/package_release.py"
+  },
+  "devDependencies": { "playwright": "1.58.2" }
+}
