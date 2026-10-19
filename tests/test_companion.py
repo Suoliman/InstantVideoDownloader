@@ -133,6 +133,12 @@ class MediaIntegrationTests(unittest.TestCase):
             "sine=frequency=440:duration=0.8", "-vn", "-c:a", "aac", "-threads", "1",
             str(cls.directory / "audio.m4a"),
         ], check=True)
+        for extension in ("mp4", "mkv"):
+            subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(cls.directory / "high.mp4"),
+                "-i", str(cls.directory / "audio.m4a"), "-map", "0:v:0", "-map", "1:a:0",
+                "-c", "copy", str(cls.directory / f"combined.{extension}"),
+            ], check=True)
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), partial(SilentHandler, directory=str(cls.directory)))
         cls.thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.thread.start()
@@ -154,13 +160,14 @@ class MediaIntegrationTests(unittest.TestCase):
         cls.thread.join()
         cls.temporary.cleanup()
 
-    def job(self, action, quality="best", emit=None, cancelled=None):
-        output = self.directory / f"out-{action}-{quality}"
+    def job(self, action, quality="best", emit=None, cancelled=None, info=None):
+        fixture = info if info is not None else self.info
+        output = self.directory / f"out-{action}-{quality}-{fixture['id']}"
         output.mkdir(exist_ok=True)
         def extract_fixture(ydl, *_args, **_kwargs):
             # Mirror the real extract_info(download=False) boundary: yt-dlp has
             # already normalized and selected formats before run_job receives it.
-            return ydl.process_ie_result(copy.deepcopy(self.info), download=False)
+            return ydl.process_ie_result(copy.deepcopy(fixture), download=False)
 
         with patch.object(YoutubeDL, "extract_info", autospec=True, side_effect=extract_fixture):
             return run_job(
@@ -177,9 +184,11 @@ class MediaIntegrationTests(unittest.TestCase):
 
     def verify_media(self, result, source, height):
         path = Path(result["path"])
-        self.assertEqual(path.suffix, ".mkv")
-        probe = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-of", "json", str(path)], capture_output=True, text=True, check=True)
-        streams = json.loads(probe.stdout)["streams"]
+        self.assertEqual(path.suffix, ".mp4")
+        probe = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)], capture_output=True, text=True, check=True)
+        media = json.loads(probe.stdout)
+        self.assertIn("mp4", media["format"]["format_name"].split(","), "Output must be an MP4 container, not just a renamed file")
+        streams = media["streams"]
         self.assertEqual({s["codec_type"] for s in streams}, {"video", "audio"})
         self.assertEqual(next(s for s in streams if s["codec_type"] == "video")["height"], height)
         self.assertEqual(self.packet_hashes(path), self.packet_hashes(self.directory / source), "Video packets must be byte-identical: no re-encoding")
@@ -195,10 +204,36 @@ class MediaIntegrationTests(unittest.TestCase):
     def test_quality_ceiling_downloads_requested_source(self):
         self.verify_media(self.job("download", quality="48"), "low.mp4", 48)
 
+    def single_source_info(self, extension):
+        info = copy.deepcopy(self.info)
+        info["id"] = f"single-{extension}"
+        info["formats"] = [{
+            **info["formats"][1], "format_id": "combined", "ext": extension,
+            "acodec": "mp4a.40.2",
+            "url": f"http://127.0.0.1:{self.server.server_port}/combined.{extension}",
+        }]
+        return info
+
+    def test_single_mkv_source_is_remuxed_to_real_mp4_without_reencoding(self):
+        self.verify_media(self.job("download", info=self.single_source_info("mkv")), "high.mp4", 96)
+
+    def test_single_mp4_source_remains_original_mp4(self):
+        result = self.job("download", info=self.single_source_info("mp4"))
+        self.verify_media(result, "high.mp4", 96)
+        self.assertEqual(Path(result["path"]).read_bytes(), (self.directory / "combined.mp4").read_bytes())
+
+    def test_repeated_mp4_download_returns_existing_file(self):
+        info = self.single_source_info("mp4")
+        first = self.job("download", info=info)
+        original_stat = Path(first["path"]).stat()
+        second = self.job("download", info=info)
+        self.assertEqual(first["path"], second["path"])
+        self.assertEqual(original_stat.st_mtime_ns, Path(second["path"]).stat().st_mtime_ns)
+
     def test_inspection_returns_metadata_without_downloading(self):
         metadata = self.job("inspect")
         self.assertEqual(metadata["heights"], [96, 48])
-        self.assertFalse(list((self.directory / "out-inspect-best").iterdir()))
+        self.assertFalse(list((self.directory / "out-inspect-best-fixture").iterdir()))
 
     def test_cancellation_stops_before_download(self):
         cancelled = threading.Event()

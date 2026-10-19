@@ -110,9 +110,9 @@ try {
   assert.match(await page.locator('#error').innerText(), /Cancelled/);
   console.log('PASS: Selected quality, progress, busy controls, and cancellation wiring.');
 
-  await page.evaluate(() => testHarness.emit({ status: 'complete', error: null, result: { filename: 'A memory [123].mkv' } }));
+  await page.evaluate(() => testHarness.emit({ status: 'complete', error: null, result: { filename: 'A memory [123].mp4' } }));
   assert.equal(await page.locator('#success').isVisible(), true);
-  assert.equal(await page.locator('#filename').innerText(), 'A memory [123].mkv');
+  assert.equal(await page.locator('#filename').innerText(), 'A memory [123].mp4');
   await page.locator('#open-folder').click();
   assert.equal(await page.evaluate(() => testHarness.requests.some((r) => r.type === 'openFolder')), true);
   await page.locator('#video-url').fill('https://www.tiktok.com/@creator/video/123');

@@ -95,7 +95,10 @@ def options(directory, quality="best"):
     return {
         "format": selector,
         "format_sort": ["res", "fps", "br"],
-        "merge_output_format": "mkv",
+        "merge_output_format": "mp4",
+        # Merging covers separate tracks; remuxing also covers a single source
+        # served as MOV, MKV, or WebM. This postprocessor always uses stream copy.
+        "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
         "outtmpl": str(Path(directory) / "%(title).140B [%(id)s].%(ext)s"),
         "windowsfilenames": True,
         "noplaylist": True,

@@ -84,7 +84,7 @@ def main():
                 import yt_dlp.version
                 try:
                     ffmpeg_location()
-                    send(request_id, "result", {"version": "0.1.0", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True})
+                    send(request_id, "result", {"version": "0.1.1", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True})
                 except RequestError as error:
                     send(request_id, "error", {"message": str(error)})
             elif action == "cancel":

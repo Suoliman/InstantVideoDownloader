@@ -51,7 +51,7 @@ Open the individual Reel if a share link is not recognized. Profiles, collection
 
 The companion uses **yt-dlp** to extract the versions a platform exposes to your session. It prioritizes resolution, frame rate, and bitrate, downloads the original encoded video and audio, and uses **FFmpeg stream copy** when they need merging. It does not capture your screen, upscale, or re-encode. Quality options show actual dimensions, so a portrait `1080 × 1920` video is not misleadingly labeled “1920p.”
 
-A combined source keeps its original container. Separate tracks are merged into **MKV** to preserve the source codecs; [VLC](https://www.videolan.org/vlc/) or IINA can play these on macOS. QuickTime may not support the resulting container or codec. The highest source can contain a platform watermark; this app does not promise watermark removal.
+Downloads are saved as **MP4**. Separate tracks are merged directly into MP4; a combined source in another container is repackaged into MP4 using stream copy. This changes the container without re-encoding or reducing resolution, frame rate, or bitrate. An existing MP4 source is kept intact. If a source codec cannot be stored in MP4, the operation reports an error rather than re-encoding or selecting a lower-quality source. Playback support still depends on the source codecs and your macOS version. The highest source can contain a platform watermark; this app does not promise watermark removal.
 
 **The platform may not expose the creator's original upload.** Your Chrome session establishes account access; it does not guarantee that a platform will accept a request from a separate downloader. Platforms can apply challenges, rate limits, regional restrictions, or change their extraction behavior. The extension reports failures instead of silently producing lower-quality recordings. Browser fingerprinting or device-bound access can still prevent a download. Protected/DRM content is not supported.
 
@@ -74,6 +74,26 @@ Permissions:
 The native host is registered for your specific extension ID. No content script is injected into your pages. Session access can be disabled per request with **Use Chrome login**.
 
 ## Update and troubleshoot
+
+### Update to MP4 output (v0.1.1)
+
+The first version merged separate tracks into MKV. Version **0.1.1** saves MP4 while preserving the original video and audio streams.
+
+1. Update the project in its existing folder (`git pull origin main` if you cloned it, or replace its source files with the latest download).
+2. Open `chrome://extensions` and click **Reload** on Instant. This restarts the companion so it loads the updated code.
+3. Inspect and download the video again. The new file will end in `.mp4` in `~/Downloads/Instant`. Existing MKV files are left in place.
+
+If you move the project or change its extension ID, rerun `python3 scripts/install_companion.py --extension-id YOUR_EXTENSION_ID` with the current ID.
+
+To repackage an already downloaded MKV without downloading it again, run this from its folder, substituting the actual filenames:
+
+```sh
+ffmpeg -n -i "video.mkv" -map 0:v:0 -map "0:a:0?" -c copy -movflags +faststart "video.mp4"
+```
+
+This keeps the MKV and copies its encoded streams into a new MP4 without quality loss. It requires MP4-compatible source codecs; renaming the file extension alone does not convert its container.
+
+### Troubleshooting
 
 - **Companion not found:** rerun the installer with the ID currently shown in `chrome://extensions`, then reconnect. Check that the project has not moved.
 - **FFmpeg missing:** run `brew install ffmpeg`. The companion checks both Apple Silicon (`/opt/homebrew/bin`) and Intel (`/usr/local/bin`) Homebrew locations.
