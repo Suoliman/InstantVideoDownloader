@@ -16,7 +16,7 @@
     <section class="intro">
       <div class="eyebrow"><span></span> KEEP THE GOOD STUFF</div>
       <h1>Worth watching.<br><span>Worth keeping.</span></h1>
-      <p>Your favorite short videos. The best available quality.<br>Saved straight to your Mac.</p>
+      <p>Your favorite short videos. The best available quality.<br>Saved straight to <span id="device-name">your computer</span>.</p>
     </section>
 
     <div class="platforms" aria-label="Supported platforms">
@@ -51,9 +51,9 @@
       <div id="error" class="error" role="alert" hidden></div>
     </section>
 
-    <section id="companion" class="companion"><div class="companion-icon" aria-hidden="true">⌘</div><div class="companion-text"><strong id="companion-title">Checking local companion</strong><span id="companion-detail">Your Mac does the heavy lifting.</span></div><button id="reconnect" type="button">Reconnect</button></section>
-    <details id="setup" class="setup"><summary>First time? Connect your Mac <span>+</span></summary><p>Install Python 3.11+ and FFmpeg, then load this folder with <b>Load unpacked</b> in <code>chrome://extensions</code>. In the project folder, run:</p><pre>brew install python ffmpeg</pre><pre id="install-command"></pre><button id="copy-command" type="button">Copy install command</button><p>The companion runs only on your Mac. Keep the project folder in place. See README.md for complete instructions.</p></details>
-    <footer><span><span class="privacy-dot"></span> Your session stays on your machine</span><span class="footer-version">v0.1.2</span></footer>
+    <section id="companion" class="companion"><div id="companion-icon" class="companion-icon" aria-hidden="true">⌘</div><div class="companion-text"><strong id="companion-title">Checking local companion</strong><span id="companion-detail">Your computer does the heavy lifting.</span></div><button id="reconnect" type="button">Reconnect</button></section>
+    <details id="setup" class="setup"><summary><span id="setup-title">First time? Connect your computer</span><span>+</span></summary><p>Install Python 3.11+ and FFmpeg, then load the <b>extension/</b> folder with <b>Load unpacked</b> in <code>chrome://extensions</code>. In the project folder, run:</p><pre id="prerequisite-command">Install Python 3.11+ and FFmpeg</pre><pre id="install-command"></pre><button id="copy-command" type="button">Copy install command</button><p id="setup-help">The companion runs only on your computer. Keep the project folder in place. See README.md for complete instructions.</p></details>
+    <footer><span><span class="privacy-dot"></span> Your session stays on your machine</span><span class="footer-version">v0.2.0</span></footer>
   </main>
   <script src="popup.js" type="module"></script>
 </body>

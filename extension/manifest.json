@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Instant — Reels & TikTok Downloader",
   "description": "Original media, highest available quality. A personal, local downloader for Facebook, Instagram and TikTok.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "minimum_chrome_version": "120",
   "icons": { "16": "icon16.png", "48": "icon48.png", "128": "icon128.png" },
   "permissions": ["activeTab", "cookies", "nativeMessaging", "storage", "contextMenus"],

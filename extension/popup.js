@@ -4,6 +4,26 @@ const $ = (id) => document.getElementById(id);
 let state;
 let dirty = false;
 let metadataKey = '';
+let operatingSystem = 'mac';
+let deviceName = 'your Mac';
+
+function configurePlatform(os, extensionId) {
+  operatingSystem = os;
+  deviceName = os === 'win' ? 'your PC' : os === 'mac' ? 'your Mac' : 'your computer';
+  $('device-name').textContent = deviceName;
+  $('setup-title').textContent = `First time? Connect ${deviceName}`;
+  $('companion-icon').textContent = os === 'mac' ? '⌘' : 'PC';
+  $('open-folder').textContent = os === 'win' ? 'Show in Explorer' : os === 'mac' ? 'Show in Finder' : 'Open folder';
+  $('playback').options[1].textContent = os === 'win' ? 'Media Player · H.264 + AAC' : os === 'mac' ? 'QuickTime / Finder · H.264 + AAC' : 'Compatible player · H.264 + AAC';
+  $('prerequisite-command').textContent = os === 'win'
+    ? 'winget install --id Python.Python.3.12 --exact --source winget\nwinget install --id Gyan.FFmpeg --exact --source winget'
+    : os === 'mac' ? 'brew install python ffmpeg' : 'Install Python 3.11+, FFmpeg and FFprobe with your system package manager.';
+  const python = os === 'win' ? 'py -3' : 'python3';
+  $('install-command').textContent = `${python} scripts/install_companion.py --extension-id ${extensionId}`;
+  $('setup-help').textContent = os === 'win'
+    ? 'You can also run Install-Windows.bat in the project folder. Keep that folder in place. See WINDOWS.md for the full Windows guide.'
+    : 'The companion runs only on your computer. Keep the project folder in place. See README.md for complete instructions.';
+}
 
 async function send(type, data = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...data });
@@ -46,14 +66,14 @@ function render(next) {
     const unavailable = quicktime && !metadata.quicktime?.available;
     $('max-quality').textContent = choices.length ? choices[0].label : 'SOURCE QUALITY';
     $('playback-note').textContent = !quicktime
-      ? 'Original codecs preserved. Use VLC if QuickTime plays only audio.'
+      ? 'Original codecs preserved. Use VLC if your video player cannot show the picture.'
       : !metadata.quicktime ? 'Update the companion files, reload Instant, and inspect again to see QuickTime sources.'
-        : unavailable ? 'No H.264/AAC source is offered. Use Original quality with VLC or IINA.'
+        : unavailable ? 'No H.264/AAC source is offered. Use Original quality with VLC.'
         : 'Best H.264/AAC source. Resolution may be lower than Original quality. No re-encoding.';
     const key = `${state.url}|${quicktime}|${JSON.stringify(choices)}`;
     if (key !== metadataKey) {
       metadataKey = key;
-      $('quality').replaceChildren(new Option(quicktime ? 'Best available for QuickTime' : 'Highest available · recommended', 'best'));
+      $('quality').replaceChildren(new Option(quicktime ? 'Best compatible H.264 / AAC source' : 'Highest available · recommended', 'best'));
       for (const quality of choices) $('quality').add(new Option(`Up to ${quality.label}`, quality.value));
       $('thumbnail-wrap').classList.remove('has-image');
       $('thumbnail').removeAttribute('src');
@@ -80,13 +100,15 @@ function render(next) {
     const media = state.result.media;
     $('media-details').textContent = media ? `${media.width} × ${media.height} · ${media.videoCodec?.toUpperCase()}${media.audioCodec ? ` + ${media.audioCodec.toUpperCase()}` : ' · no audio track'}` : '';
     $('compatibility-warning').hidden = !media || media.quicktimeCompatible;
-    $('compatibility-warning').textContent = media && !media.quicktimeCompatible ? 'QuickTime may play only audio with these source codecs. Open in VLC/IINA or select QuickTime playback above.' : '';
+    $('compatibility-warning').textContent = media && !media.quicktimeCompatible
+      ? operatingSystem === 'mac' ? 'QuickTime may play only audio with these source codecs. Open in VLC/IINA or select QuickTime playback above.'
+        : 'Your video player may need a video codec for this source. Open in VLC or select compatible H.264/AAC playback above.' : '';
   }
   $('error').hidden = !state.error;
   $('error').textContent = state.error || '';
   $('companion').classList.toggle('connected', !!state.helper);
   $('companion-title').textContent = state.helper ? 'Local companion connected' : 'Local companion needed';
-  $('companion-detail').textContent = state.helper ? `FFmpeg ready · companion ${state.helper.version || 'older version'}` : 'One quick setup. Everything stays on your Mac.';
+  $('companion-detail').textContent = state.helper ? `FFmpeg ready · companion ${state.helper.version || 'older version'}` : `One quick setup. Everything stays on ${deviceName}.`;
   highlightPlatform();
 }
 
@@ -108,7 +130,7 @@ async function currentTab() {
 
 async function reconnect() {
   $('reconnect').disabled = true;
-  $('companion-title').textContent = 'Connecting to your Mac…';
+  $('companion-title').textContent = `Connecting to ${deviceName}…`;
   try {
     await send('connect');
     $('setup').open = false;
@@ -162,8 +184,9 @@ chrome.runtime.onMessage.addListener((message) => { if (message.type === 'state'
 
 try {
   const initial = await send('getState');
+  const platform = await chrome.runtime.getPlatformInfo();
+  configurePlatform(platform.os, initial.extensionId);
   $('playback').value = initial.state.outputMode || 'original';
-  $('install-command').textContent = `python3 scripts/install_companion.py --extension-id ${initial.extensionId}`;
   render(initial.state);
   if (!initial.state.url) await currentTab().catch(() => {});
   await reconnect();

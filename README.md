@@ -1,6 +1,12 @@
 # instant.
 
-A personal Chrome extension for **Facebook Reels, Instagram Reels, and TikTok**. Download the actual media streams at the highest available quality, using your existing Chrome login. Built for macOS with a local Python companion. There is no hosted backend, subscription, or screen recording.
+A personal Chrome extension for **Facebook Reels, Instagram Reels, and TikTok**. Download the actual media streams at the highest available quality, using your existing Chrome login. Supports **Windows and macOS** with a local Python companion. There is no hosted backend, subscription, or screen recording.
+
+## Install on Windows
+
+See the [Windows setup guide](WINDOWS.md). Install Python 3.11+ with its launcher and FFmpeg, load the `extension/` folder in Chrome, then run **Install-Windows.bat**. It prompts for your extension ID and registers the companion for your Windows user.
+
+The extension automatically displays Windows setup commands, **Show in Explorer**, and **Media Player · H.264 + AAC**. Original-quality downloads and Chrome login reuse work through the same shared media pipeline; there is no separate browser extension to maintain.
 
 ## Install on your Mac
 
@@ -23,7 +29,7 @@ brew install python ffmpeg
 
 The installer creates `.venv` in this project and registers a per-user Chrome native messaging host in `~/Library/Application Support/Google/Chrome/NativeMessagingHosts/`. It needs no administrator privileges. **Keep the project at the installed path**; rerun the installer if you move it or change the extension ID.
 
-The installer also supports Linux (`--browser chromium` for Chromium). Windows is not implemented. macOS installation is implemented but has not been exercised on a physical Mac in the cloud test environment.
+The installer also supports Linux (`--browser chromium` for Chromium). Windows has its own launcher and per-user registry registration, described in [WINDOWS.md](WINDOWS.md). Native Windows Chrome and physical Mac acceptance should be distinguished from the Linux/fixture checks described below.
 
 ## Save a video
 
@@ -149,6 +155,6 @@ The Python integration tests generate real H.264, AV1, and AAC sources, serve th
 
 `npm run test:extension` is an additional real extension/native-host browser check for a browser that permits unpacked extensions. It is blocked in the current cloud Chromium by administrator policy (`ExtensionInstallBlocklist: ["*"]`); the policy is left intact. The default browser UI checks do not install an extension or bypass that restriction.
 
-Build a source-only macOS installation archive with `npm run package`. It excludes environments, test artifacts, and downloaded media.
+Build source-only Windows and macOS installation archives with `npm run package`. They exclude environments, test artifacts, downloaded media, and FFmpeg binaries. GitHub Actions runs the shared tests on Windows and Linux, including the real batch-host protocol smoke on Windows. The standalone `test:extension` harness currently uses Linux's isolated Chromium configuration; use the documented manual Chrome checks on Windows/macOS.
 
 Live authenticated platform extraction requires a real logged-in Chrome profile on your Mac and is a separate acceptance check. It is not claimed by the fixture tests. To verify: inspect and download one accessible Reel/video from each platform, confirm audio and resolution with `ffprobe`, and compare the highest offered format against the source metadata. Never commit session cookies or test accounts.

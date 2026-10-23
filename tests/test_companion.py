@@ -96,7 +96,7 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(reply["id"], "health")
         self.assertEqual(reply["type"], "result")
         self.assertTrue(reply["data"]["ffmpeg"])
-        self.assertEqual(reply["data"]["version"], "0.1.2")
+        self.assertEqual(reply["data"]["version"], "0.2.0")
         self.assertIn("quicktime-source", reply["data"]["capabilities"])
         self.assertEqual(process.stderr, b"")
 
@@ -104,12 +104,13 @@ class ProtocolTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             subprocess.run([
                 sys.executable, str(ROOT / "scripts/install_companion.py"),
-                "--extension-id", "a" * 32, "--manifest-dir", folder, "--skip-deps",
+                "--extension-id", "a" * 32, "--manifest-dir", folder, "--skip-deps", "--no-register",
             ], check=True, capture_output=True)
             manifest = json.loads((Path(folder) / "com.instantvideodownloader.companion.json").read_text())
             self.assertEqual(manifest["allowed_origins"], ["chrome-extension://" + "a" * 32 + "/"])
             self.assertTrue(Path(manifest["path"]).is_file())
-            self.assertEqual(Path(manifest["path"]).stat().st_mode & 0o777, 0o700)
+            if sys.platform != "win32":
+                self.assertEqual(Path(manifest["path"]).stat().st_mode & 0o777, 0o700)
 
 
 class SilentHandler(SimpleHTTPRequestHandler):
@@ -233,7 +234,7 @@ class MediaIntegrationTests(unittest.TestCase):
         self.assertEqual(compatible["media"]["videoCodec"], "h264")
         self.assertEqual(compatible["media"]["audioCodec"], "aac")
         self.assertTrue(compatible["media"]["quicktimeCompatible"])
-        self.assertIn("[QuickTime]", compatible["filename"])
+        self.assertIn("[H264]" if sys.platform == "win32" else "[QuickTime]", compatible["filename"])
         self.assertEqual(Path(original["path"]).parent, Path(compatible["path"]).parent)
         self.assertNotEqual(original["path"], compatible["path"], "QuickTime must not reuse the incompatible original file")
         self.assertEqual(compatible["metadata"]["quicktime"]["qualities"], [{"value": "48", "label": "64 × 48"}])

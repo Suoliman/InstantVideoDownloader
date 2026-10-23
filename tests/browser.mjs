@@ -6,6 +6,10 @@ import { spawnSync } from 'node:child_process';
 import { chromium } from 'playwright';
 import { parseVideoUrl } from '../extension/platforms.js';
 
+if (process.platform !== 'linux') {
+  throw new Error('The isolated native Chrome test currently requires Linux. Run npm run test:browser for the cross-platform UI suite, and follow the documented native Chrome acceptance checks on Windows/macOS.');
+}
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const artifacts = path.join(root, '.test-artifacts');
 await fs.mkdir(artifacts, { recursive: true });

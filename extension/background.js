@@ -94,7 +94,7 @@ async function media(action, input) {
       const helper = await native('ping');
       await update({ helper });
       if (!helper.capabilities?.includes('quicktime-source')) {
-        throw new Error('The local companion needs updating for QuickTime playback. Update the companion files in the installed project folder, then reload Instant in chrome://extensions.');
+        throw new Error('The local companion needs updating for compatible H.264/AAC playback. Update the companion files in the installed project folder, then reload Instant in chrome://extensions.');
       }
     }
     const cookies = await sessionCookies(parsed.platform, useLogin);
@@ -102,7 +102,7 @@ async function media(action, input) {
       update({ progress }).catch(() => {});
     });
     if (action === 'download' && outputMode === 'quicktime' && !result.media?.quicktimeCompatible) {
-      throw new Error('The companion did not verify a QuickTime-compatible video track. Update both the extension and companion, then try again.');
+      throw new Error('The companion did not verify a compatible H.264/AAC video track. Update both the extension and companion, then try again.');
     }
     if (action === 'inspect') await update({ status: 'ready', metadata: result, progress: null });
     else await update({ status: 'complete', result, metadata: result.metadata, progress: null });

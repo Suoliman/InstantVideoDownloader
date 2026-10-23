@@ -1,6 +1,6 @@
 {
   "name": "instant-video-downloader",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,7 +8,7 @@
     "test:browser": "node tests/ui.mjs",
     "test:extension": "node tests/browser.mjs",
     "test:background": "node --test tests/background.test.mjs",
-    "package": "python3 scripts/package_release.py"
+    "package": "node scripts/package_release.mjs"
   },
   "devDependencies": { "playwright": "1.58.2" }
 }

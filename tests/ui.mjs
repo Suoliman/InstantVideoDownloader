@@ -26,7 +26,8 @@ try {
   page.setDefaultTimeout(15000);
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
-  await page.addInitScript(() => {
+  const testPlatform = process.env.TEST_PLATFORM || 'mac';
+  await page.addInitScript((platform) => {
     const listeners = [];
     const requests = [];
     const initial = { status: 'idle', url: '', useLogin: true, helper: null, metadata: null, progress: null, result: null, error: null };
@@ -45,6 +46,7 @@ try {
     globalThis.chrome = {
       tabs: { query: async () => [{ id: 1, url: 'https://www.instagram.com/reel/Fixture/?igsh=tracking' }] },
       runtime: {
+        getPlatformInfo: async () => ({ os: platform }),
         onMessage: { addListener: (listener) => listeners.push(listener) },
         sendMessage: async (message) => {
           requests.push(message);
@@ -62,12 +64,19 @@ try {
         },
       },
     };
-  });
+  }, testPlatform);
   await page.goto(`http://127.0.0.1:${server.address().port}/popup.html`);
   await page.waitForFunction(() => document.getElementById('setup').open);
   assert.equal(await page.locator('#video-url').inputValue(), 'https://www.instagram.com/reel/Fixture/');
   assert.match(await page.locator('#install-command').innerText(), /a{32}/);
   assert.equal(await page.locator('#use-login').isChecked(), true);
+  assert.match(await page.locator('#device-name').innerText(), testPlatform === 'win' ? /your PC/ : /your Mac/);
+  if (testPlatform === 'win') {
+    assert.match(await page.locator('#install-command').innerText(), /^py -3 /);
+    assert.match(await page.locator('#prerequisite-command').innerText(), /winget install/);
+    assert.equal(await page.locator('#open-folder').innerText(), 'Show in Explorer');
+    assert.match(await page.locator('#playback option[value=quicktime]').innerText(), /Media Player/);
+  }
   console.log('PASS: Current tab normalization, login default, and actionable companion setup.');
 
   await page.locator('#setup summary').click();
@@ -128,7 +137,7 @@ try {
   assert.equal(await page.locator('#filename').innerText(), 'A memory [123].mp4');
   assert.match(await page.locator('#media-details').innerText(), /AV1/);
   assert.equal(await page.locator('#compatibility-warning').isVisible(), true);
-  assert.match(await page.locator('#compatibility-warning').innerText(), /QuickTime may play only audio/);
+  assert.match(await page.locator('#compatibility-warning').innerText(), /QuickTime may play only audio|may need a video codec/);
   await page.locator('#open-folder').click();
   assert.equal(await page.evaluate(() => testHarness.requests.some((r) => r.type === 'openFolder')), true);
   await page.locator('#video-url').fill('https://www.tiktok.com/@creator/video/123');

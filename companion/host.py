@@ -15,6 +15,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from companion.core import Cancelled, RequestError, ffmpeg_location, ffprobe_location, friendly_error, run_job
+from companion.system import configure_binary_stdio, quiet_process_options, reveal_command
 
 HOST_NAME = "com.instantvideodownloader.companion"
 MAX_MESSAGE = 1024 * 1024
@@ -47,6 +48,7 @@ def write_message(stream, message):
 
 
 def main():
+    configure_binary_stdio()
     write_lock = threading.Lock()
     busy = threading.Lock()
     cancelled = threading.Event()
@@ -85,7 +87,7 @@ def main():
                 try:
                     ffmpeg_location()
                     ffprobe_location()
-                    send(request_id, "result", {"version": "0.1.2", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True, "capabilities": ["quicktime-source", "verify-media"]})
+                    send(request_id, "result", {"version": "0.2.0", "extractorVersion": yt_dlp.version.__version__, "ffmpeg": True, "capabilities": ["quicktime-source", "verify-media"]})
                 except RequestError as error:
                     send(request_id, "error", {"message": str(error)})
             elif action == "cancel":
@@ -93,9 +95,9 @@ def main():
                 send(request_id, "result", {"ok": True})
             elif action == "open_folder":
                 if last_download and Path(last_download).is_file():
-                    command = ["open", "-R", last_download] if sys.platform == "darwin" else ["xdg-open", str(Path(last_download).parent)]
+                    command = reveal_command(last_download)
                     try:
-                        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **quiet_process_options())
                         send(request_id, "result", {"ok": True})
                     except OSError:
                         send(request_id, "error", {"message": "Open Downloads/Instant in your file manager."})

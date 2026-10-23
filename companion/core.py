@@ -7,7 +7,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import threading
 import time
@@ -16,11 +15,13 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from yt_dlp import YoutubeDL
 from yt_dlp.utils import DownloadError, ExtractorError
 
+from companion.system import downloads_directory, find_tool, quiet_process_options, tool_install_hint
+
 PLATFORMS = {"facebook": "facebook.com", "instagram": "instagram.com", "tiktok": "tiktok.com"}
 FORMAT = "bestvideo*+bestaudio/best"
 H264 = r"(?i)^(avc1|h264)"
 AAC = r"(?i)^(mp4a|aac)"
-NO_QUICKTIME_SOURCE = "The platform does not offer an H.264/AAC source at this quality. Choose another quality, or use Original quality with VLC or IINA. No video was re-encoded."
+NO_QUICKTIME_SOURCE = "The platform does not offer an H.264/AAC source at this quality. Choose another quality, or use Original quality with VLC. No video was re-encoded."
 
 
 class RequestError(ValueError):
@@ -66,21 +67,20 @@ def validate_url(value):
 
 
 def ffmpeg_location():
-    search = os.pathsep.join([os.environ.get("PATH", ""), "/opt/homebrew/bin", "/usr/local/bin"])
-    executable = shutil.which("ffmpeg", path=search)
+    executable = find_tool("ffmpeg")
     if not executable:
-        raise RequestError("FFmpeg is missing. On macOS, run: brew install ffmpeg")
+        raise RequestError("FFmpeg is missing. " + tool_install_hint())
     return executable
 
 
 def ffprobe_location():
-    sibling = Path(ffmpeg_location()).with_name("ffprobe")
+    ffmpeg = Path(ffmpeg_location())
+    sibling = ffmpeg.with_name("ffprobe.exe" if ffmpeg.suffix.lower() == ".exe" else "ffprobe")
     if sibling.is_file() and os.access(sibling, os.X_OK):
         return str(sibling)
-    search = os.pathsep.join([os.environ.get("PATH", ""), "/opt/homebrew/bin", "/usr/local/bin"])
-    executable = shutil.which("ffprobe", path=search)
+    executable = find_tool("ffprobe")
     if not executable:
-        raise RequestError("FFprobe is missing. On macOS, run: brew reinstall ffmpeg")
+        raise RequestError("FFprobe is missing. " + tool_install_hint())
     return executable
 
 
@@ -90,7 +90,7 @@ def verify_output(path, output_mode="original", require_audio=False):
             ffprobe_location(), "-v", "error", "-show_entries",
             "stream=codec_name,codec_type,codec_tag_string,pix_fmt,width,height:stream_disposition=attached_pic",
             "-of", "json", str(path),
-        ], capture_output=True, timeout=30, check=True)
+        ], capture_output=True, timeout=30, check=True, **quiet_process_options())
         streams = json.loads(probe.stdout)["streams"]
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
         raise RequestError("The saved media could not be verified. The download has not been marked successful.") from None
@@ -109,7 +109,7 @@ def verify_output(path, output_mode="original", require_audio=False):
         and (audio is None or audio.get("codec_name") == "aac")
     )
     if output_mode == "quicktime" and not compatible:
-        raise RequestError("This source is not a standard 8-bit H.264/AAC MP4 for QuickTime. Use Original quality with VLC or IINA; no re-encoding was performed.")
+        raise RequestError("This source is not a standard 8-bit H.264/AAC MP4. Use Original quality with VLC; no re-encoding was performed.")
     return {
         "videoCodec": video.get("codec_name"), "audioCodec": audio.get("codec_name") if audio else None,
         "width": video["width"], "height": video["height"],
@@ -118,7 +118,7 @@ def verify_output(path, output_mode="original", require_audio=False):
 
 
 def output_directory():
-    directory = Path.home() / "Downloads" / "Instant"
+    directory = downloads_directory() / "Instant"
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
@@ -140,7 +140,7 @@ class QuietLogger:
 
 def options(directory, quality="best", output_mode="original"):
     if output_mode not in ("original", "quicktime"):
-        raise RequestError("Choose Original quality or QuickTime playback.")
+        raise RequestError("Choose Original quality or compatible H.264/AAC playback.")
     if quality != "best" and (not isinstance(quality, str) or not re.fullmatch(r"[1-9]\d{1,4}", quality)):
         raise RequestError("Choose an available video quality.")
     selector = FORMAT if quality == "best" else f"bestvideo*[height<={quality}]+bestaudio/best[height<={quality}]"
@@ -157,7 +157,7 @@ def options(directory, quality="best", output_mode="original"):
         # Merging covers separate tracks; remuxing also covers a single source
         # served as MOV, MKV, or WebM. This postprocessor always uses stream copy.
         "postprocessors": [{"key": "FFmpegVideoRemuxer", "preferedformat": "mp4"}],
-        "outtmpl": str(Path(directory) / ("%(title).140B [%(id)s]" + (" [QuickTime]" if output_mode == "quicktime" else "") + ".%(ext)s")),
+        "outtmpl": str(Path(directory) / ("%(title).140B [%(id)s]" + ((" [H264]" if os.name == "nt" else " [QuickTime]") if output_mode == "quicktime" else "") + ".%(ext)s")),
         "windowsfilenames": True,
         "noplaylist": True,
         "overwrites": False,
@@ -273,7 +273,7 @@ def run_job(request, emit, cancelled: threading.Event, directory=None):
     action = request.get("action")
     if action not in ("inspect", "download"):
         raise RequestError("Unknown media action.")
-    target = Path(directory) if directory else (output_directory() if action == "download" else Path.home() / "Downloads" / "Instant")
+    target = Path(directory) if directory else (output_directory() if action == "download" else downloads_directory() / "Instant")
     output_mode = request.get("outputMode", "original")
     opts = options(target, request.get("quality", "best"), output_mode if action == "download" else "original")
     user_agent = request.get("userAgent")

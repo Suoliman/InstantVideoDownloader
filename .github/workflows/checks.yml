@@ -1,0 +1,66 @@
+name: Windows and Linux checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: 'Instant project'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ffmpeg --no-progress --yes
+      - name: Prepare Python environment
+        working-directory: 'Instant project'
+        run: |
+          python -m venv .venv
+          python -c "import os; from pathlib import Path; print('VENV_PYTHON=' + (Path('.venv') / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')).resolve().as_posix())" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        working-directory: 'Instant project'
+        run: |
+          "$VENV_PYTHON" -m pip install -r requirements.txt
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Check the companion and native protocol
+        working-directory: 'Instant project'
+        run: '"$VENV_PYTHON" -m unittest discover -s tests -v'
+      - name: Check JavaScript and both platform interfaces
+        working-directory: 'Instant project'
+        run: |
+          npm run check
+          npm run test:background
+          TEST_PLATFORM=mac npm run test:browser
+          TEST_PLATFORM=win npm run test:browser
+      - name: Build installation archives
+        working-directory: 'Instant project'
+        run: npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-${{ runner.os }}
+          path: 'Instant project/dist/*.zip'
